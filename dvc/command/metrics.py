@@ -16,30 +16,44 @@ def _show_metrics(
 ):
     from dvc.utils.diff import format_dict
     from dvc.utils.flatten import flatten
+    from dvc.utils.diff import table
 
     # When `metrics` contains a `None` key, it means that some files
     # specified as `targets` in `repo.metrics.show` didn't contain any metrics.
     missing = metrics.pop(None, None)
 
-    lines = []
+    header_set = set()
+    rows = []
+    for branch, val in metrics.items():
+        for fname, metric in val.items():
+            for key in flatten(format_dict(metric)).items():
+                header_set.add(key)
+    header = list(header_set)
     for branch, val in metrics.items():
         if all_branches or all_tags or all_commits:
-            lines.append(f"{branch}:")
+            logger.info(f"{branch}:")
 
         for fname, metric in val.items():
+            row = []
+            row.append(branch)
+            row.append(fname)
             if not isinstance(metric, dict):
-                lines.append("\t{}: {}".format(fname, str(metric)))
+                row.append(str(metric))
                 continue
+            flattened_val = flatten(format_dict(metric))
 
-            lines.append(f"\t{fname}:")
-            for key, value in flatten(format_dict(metric)).items():
-                lines.append(f"\t\t{key}: {value}")
+            for i in header:
+                if i in flattened_val:
+                    row.append(flattened_val[i])
+                else:
+                    row.append(None)
+            rows.append(row)
+    header.insert(0,"Path")
+    header.insert(0,"Branch")
 
     if missing:
         raise BadMetricError(missing)
-
-    return "\n".join(lines)
-
+    return table(header, rows, markdown=False)  
 
 class CmdMetricsBase(CmdBase):
     UNINITIALIZED = True
@@ -286,3 +300,4 @@ def add_parser(subparsers, parent_parser):
         metavar="<n>",
     )
     metrics_diff_parser.set_defaults(func=CmdMetricsDiff)
+
